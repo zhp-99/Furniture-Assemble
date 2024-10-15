@@ -635,9 +635,10 @@ class FurnitureSimEnv(gym.Env):
             device=self.device,
         )
 
-    @property
-    def sim_to_robot_mat(self):
-        return torch.tensor(self.franka_from_origin_mat, device=self.device)
+    # zhp: deleted. I think this is wrong
+    # @property
+    # def sim_to_robot_mat(self):
+    #     return torch.tensor(self.franka_from_origin_mat, device=self.device)
 
     @property
     def april_to_robot_mat(self):

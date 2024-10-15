@@ -13,6 +13,17 @@ except ImportError:
 
 # FurnitureBench environment with full observation.
 register(
+    id="test-v0",
+    entry_point="furniture_bench.envs.test_env:FurnitureSimEnv",
+)
+
+register(
+    id="dual-franka-hand-v0",
+    entry_point="furniture_bench.envs.dual_franka_hand_env:FurnitureSimEnv",
+)
+
+# FurnitureBench environment with full observation.
+register(
     id="FurnitureBench-v0",
     entry_point="furniture_bench.envs.furniture_bench_env:FurnitureBenchEnv",
 )

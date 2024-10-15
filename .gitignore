@@ -138,3 +138,5 @@ log
 *.avi
 
 checkpoints
+
+workspace/data

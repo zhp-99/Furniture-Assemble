@@ -22,8 +22,8 @@ DEFAULT_VISUAL_OBS = [
     "robot_state/ee_pos_vel",
     "robot_state/ee_ori_vel",
     "robot_state/gripper_width",
-    "color_image1",
     "color_image2",
+    "color_image3",
 ]
 
 DEFAULT_STATE_OBS = [
