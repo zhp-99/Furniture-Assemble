@@ -140,3 +140,5 @@ log
 checkpoints
 
 workspace/data
+workspace/logs
+

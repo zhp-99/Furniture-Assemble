@@ -15,22 +15,16 @@ class AssembleDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = self.data[idx]
-        # "all_finished": all_finished,
-        # "table_points": points.cpu(),
-        # "table_normals": normals.cpu(),
-        # "leg_points": leg_points.cpu(),
-        # "ori_table_pose": ori_table_pose.cpu(),
-        # "start_table_pose": start_table_pose.cpu(), 
-        # "final_table_pose": final_table_pose.cpu(),
-        # "sampled_point": sampled_point.cpu(),
-        # "sampled_normal": sampled_normal.cpu(),
-        # "action_direct": action_direct.cpu(),
 
         all_finished = sample["all_finished"]
         if all_finished:
             reward = (sample["final_table_pose"][:3,3] - sample["start_table_pose"][:3,3]).abs().sum()
         else:
-            reward = torch.tensor(1)
+            raise ValueError("This should not happen")
+            reward = torch.tensor(0.5)
+        
+        # clamp to 0-0.1
+        reward = torch.clamp(reward, 0, 0.1)
         
         return sample["table_points"],  sample["leg_points"], sample["sampled_point"], sample["sampled_normal"], sample["action_direct"], reward
     
@@ -39,17 +33,35 @@ class AssembleDataset(Dataset):
         terminated_folder = "data/terminated"
 
         dataset = []
+        train_num = 10000
+        val_num = 3000
         if split == "train":
-            for i in range(10000):
-                finished_data = torch.load(os.path.join(finised_folder, "data_" + str(i) + ".pt"))
-                terminated_data = torch.load(os.path.join(terminated_folder, "data_" + str(i) + ".pt"))
+            # check cache
+            if os.path.exists(os.path.join("data", split + "_" + str(train_num) + ".pt")):
+                print("loading from cache")
+                return torch.load(os.path.join("data", split + "_" + str(train_num) + ".pt"), weights_only=True)
+        
+            for i in range(train_num):
+                finished_data = torch.load(os.path.join(finised_folder, "data_" + str(i) + ".pt"), weights_only=True)
+                # terminated_data = torch.load(os.path.join(terminated_folder, "data_" + str(i) + ".pt"), weights_only=True)
                 dataset.append(finished_data)
-                dataset.append(terminated_data)
+                # dataset.append(terminated_data)
         else:
-            for i in range(10000, 13000):
-                finished_data = torch.load(os.path.join(finised_folder, "data_" + str(i) + ".pt"))
-                terminated_data = torch.load(os.path.join(terminated_folder, "data_" + str(i) + ".pt"))
+            # check cache
+            if os.path.exists(os.path.join("data", split + "_" + str(val_num) + ".pt")):
+                print("loading from cache")
+                return torch.load(os.path.join("data", split + "_" + str(val_num) + ".pt"), weights_only=True)
+            
+            for i in range(train_num, train_num + val_num):
+                finished_data = torch.load(os.path.join(finised_folder, "data_" + str(i) + ".pt"), weights_only=True)
+                # terminated_data = torch.load(os.path.join(terminated_folder, "data_" + str(i) + ".pt"), weights_only=True)
                 dataset.append(finished_data)
-                dataset.append(terminated_data)
+                # dataset.append(terminated_data)
+        
+        # cache the dataset
+        if split == "train":
+            torch.save(dataset, os.path.join("data", split + "_" + str(train_num) + ".pt"))
+        else:
+            torch.save(dataset, os.path.join("data", split + "_" + str(val_num) + ".pt"))
         
         return dataset

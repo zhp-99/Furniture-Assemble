@@ -7,16 +7,22 @@ import torch
 import torch.utils.data
 import torch.nn.functional as F
 from datasets.dataset import AssembleDataset
-from models.model_critic_fir import Network as CriticNetwork
-from models.pointnet2_ops.pointnet2_utils import furthest_point_sample
+from models.model_assemble import Network as CriticNetwork
 
 from tqdm import tqdm, trange
+from torch.utils.tensorboard import SummaryWriter
 
 
 from tensorboardX import SummaryWriter
 
+def log_writer(epoch, writer, content, is_val):
+    prefix = "Val/" if is_val else "Train/"
+    for key, value in content.items():
+        print("Epoch: %d, %s%s: %f" % (epoch, prefix, key, value))
+        writer.add_scalar(prefix + key, value, epoch)
 
 def train():
+    writer = SummaryWriter(log_dir='logs')
     feat_dim = 128
     cp_feat_dim = 32
     dir_feat_dim = 32
@@ -24,8 +30,8 @@ def train():
     weight_decay = 1e-5
     lr_decay_every = 500
     lr_decay_by = 0.9
-    batch_size = 32
-    num_epochs = 10000
+    batch_size = 128
+    num_epochs = 1000
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     print('Creating network ...... ')
@@ -44,26 +50,6 @@ def train():
         for k, v in state.items():
             if torch.is_tensor(v):
                 state[k] = v.to(device)
-
-    # affordance, actor, critic = None, None, None
-    # # load aff2 + actor2 + critic2
-    # if conf.model_version == 'model_critic_fir':
-    #     aff_def = utils.get_model_module(conf.aff_version)
-    #     affordance = aff_def.Network(conf.feat_dim, conf.task_feat_dim, conf.cp_feat_dim, conf.dir_feat_dim, task_input_dim=task_input_dim)
-    #     affordance.load_state_dict(torch.load(os.path.join(conf.aff_path, 'ckpts', '%s-network.pth' % conf.aff_eval_epoch)))
-    #     affordance.to(conf.device)
-
-    #     actor_def = utils.get_model_module(conf.actor_version)
-    #     actor = actor_def.Network(conf.feat_dim, conf.task_feat_dim, conf.cp_feat_dim, conf.dir_feat_dim, z_dim=conf.z_dim, task_input_dim=task_input_dim)
-    #     actor.load_state_dict(torch.load(os.path.join(conf.actor_path, 'ckpts', '%s.pth' % conf.actor_eval_epoch)))
-    #     actor.to(conf.device)
-
-    #     critic_def = utils.get_model_module(conf.critic_version)
-    #     critic = critic_def.Network(conf.feat_dim, conf.task_feat_dim, conf.cp_feat_dim, conf.dir_feat_dim, task_input_dim=task_input_dim)
-    #     critic.load_state_dict(torch.load(os.path.join(conf.critic_path, 'ckpts', '%s-network.pth' % conf.critic_eval_epoch)))
-    #     critic.to(conf.device)
-
-
     # load dataset
     print('Loading dataset ...... ')
     train_dataset = AssembleDataset("train")
@@ -78,48 +64,28 @@ def train():
 
     # start training
     start_epoch = 0
-
-
-    # train for every epoch
     print('Start training ...... ')
-    for epoch in trange(start_epoch, num_epochs):   # 每个epoch重新获得一次train dataset
-
-
+    for epoch in range(start_epoch, num_epochs):
         train_batches = enumerate(train_dataloader, 0)
         val_batches = enumerate(val_dataloader, 0)
 
-        val_fraction_done = 0.0
-        val_batch_ind = -1
-
-        ep_loss, ep_cnt = 0, 0
         train_ep_loss, train_cnt = 0, 0
 
         ### train for every batch
-        for train_batch_ind, batch in train_batches:
-            train_fraction_done = (train_batch_ind + 1) / train_num_batch
-            train_step = epoch * train_num_batch + train_batch_ind
-
-
-
-            # save checkpoint
-            # if epoch % 2 == 0 and train_batch_ind == 0:
-            #     with torch.no_grad():
-            #         print('Saving checkpoint ...... ')
-            #         torch.save(network.state_dict(), os.path.join(conf.exp_dir, 'ckpts', '%d-network.pth' % epoch))
-            #         torch.save(network_opt.state_dict(), os.path.join(conf.exp_dir, 'ckpts', '%d-optimizer.pth' % epoch))
-            #         torch.save(network_lr_scheduler.state_dict(), os.path.join(conf.exp_dir, 'ckpts', '%d-lr_scheduler.pth' % epoch))
-            #         print('DONE')
-
+        total_all_acc, positive_acc, negative_acc, fail_acc = 0, 0, 0, 0
+        percent_positive, percent_negative, percent_fail = 0, 0, 0
+        for train_batch_ind, batch in tqdm(train_batches, total=train_num_batch):
             # set models to training mode
             network.train()
+            total_loss, all_acc, positive, negative, fail = critic_forward(batch=batch, network=network, device=device)
+            total_all_acc += all_acc
+            positive_acc += positive[0]
+            percent_positive += positive[1]
+            negative_acc += negative[0]
+            percent_negative += negative[1]
+            fail_acc += fail[0]
+            percent_fail += fail[1]
 
-            # forward pass (including logging)
-            total_loss = critic_forward(batch=batch, network=network,
-                                        step=train_step,
-                                        lr=network_opt.param_groups[0]['lr'],
-                                        )
-
-            # optimize one step
             network_opt.zero_grad()
             total_loss.backward()
             network_opt.step()
@@ -128,69 +94,89 @@ def train():
             train_ep_loss += total_loss
             train_cnt += 1
 
-        print("epoch: %d, total_train_loss: %f" % (epoch, train_ep_loss / train_cnt))
+        content = {
+            "total_loss": train_ep_loss / train_cnt,
+            "all_acc": total_all_acc / train_cnt,
+            "positive_acc": positive_acc / train_cnt,
+            "negative_acc": negative_acc / train_cnt,
+        }
+        log_writer(epoch, writer, content, is_val=False)
+        if epoch % 1 == 0:
+            # validate
+            total_all_acc, positive_acc, negative_acc, fail_acc = 0, 0, 0, 0
+            percent_positive, percent_negative, percent_fail = 0, 0, 0
+            val_cnt = 0
+            for val_batch_ind, batch in tqdm(val_batches, total=len(val_dataloader)):
+                # set models to evaluation mode
+                network.eval()
 
-        #     # validate one batch
-        #     while val_fraction_done <= train_fraction_done and val_batch_ind + 1 < val_num_batch:
-        #         val_batch_ind, val_batch = next(val_batches)
+                with torch.no_grad():
+                    all_acc, positive, negative, fail = critic_forward(batch=batch, network=network, device=device, is_val=True)
+                    total_all_acc += all_acc
+                    positive_acc += positive[0]
+                    percent_positive += positive[1]
+                    negative_acc += negative[0]
+                    percent_negative += negative[1]
+                    fail_acc += fail[0]
+                    percent_fail += fail[1]
+                    val_cnt += 1
+                
+            content = {
+                "all_acc": total_all_acc / val_cnt,
+                "positive_acc": positive_acc / val_cnt,
+                "negative_acc": negative_acc / val_cnt,
+            }
+            log_writer(epoch, writer, content, is_val=True)
 
-        #         val_fraction_done = (val_batch_ind + 1) / val_num_batch
-        #         val_step = (epoch + val_fraction_done) * train_num_batch - 1
-
-        #         log_console = not conf.no_console_log and (last_val_console_log_step is None or \
-        #                 val_step - last_val_console_log_step >= conf.console_log_interval)
-        #         if log_console:
-        #             last_val_console_log_step = val_step
-
-        #         # set models to evaluation mode
-        #         network.eval()
-
-        #         with torch.no_grad():
-        #             # forward pass (including logging)
-        #             loss = critic_forward(batch=val_batch, data_features=data_features, network=network, conf=conf, is_val=True, \
-        #                                    step=val_step, epoch=epoch, batch_ind=val_batch_ind, num_batch=val_num_batch, start_time=start_time, \
-        #                                    log_console=log_console, log_tb=not conf.no_tb_log, tb_writer=val_writer, lr=network_opt.param_groups[0]['lr'],
-        #                                    affordance=affordance, actor=actor, critic=critic)
-        #             ep_loss += loss
-        #             ep_cnt += 1
-
-        # utils.printout(flog, "epoch: %d, total_train_loss: %f, total_val_loss: %f" % (epoch, train_ep_loss / train_cnt, ep_loss / ep_cnt))
+        # save checkpoint
+        if epoch % 10 == 0:
+            with torch.no_grad():
+                print('Saving checkpoint ...... ')
+                torch.save(network.state_dict(), os.path.join("logs", 'ckpts', '%d-network.pth' % epoch))
+                torch.save(network_opt.state_dict(), os.path.join("logs", 'ckpts', '%d-optimizer.pth' % epoch))
+                torch.save(network_lr_scheduler.state_dict(), os.path.join("logs", 'ckpts', '%d-lr_scheduler.pth' % epoch))
+                print('DONE')
 
 
-def critic_forward(batch, network, lr=None, device=None, step=None, is_val=False, log_tb=False, tb_writer=None):
+def get_acc(reward, pred_score):
+    reward_succ = reward < 0.04
+    pred_score_succ = pred_score < 0.04
+    all_acc = (pred_score_succ == reward_succ).float().mean()
+
+    positive_mask = (reward < 0.04)
+    positive_acc = pred_score_succ[positive_mask].float().mean()
+    percent_positive = positive_mask.sum()/len(reward)
+
+    negative_mask = ((reward >= 0.04) & (reward < 0.3))
+    pred_score_neg = ((pred_score >= 0.04) & (pred_score < 0.3))
+    negative_acc = pred_score_neg[negative_mask].float().mean()
+    percent_negative = negative_mask.sum()/len(reward)
+
+    fail_mask = (reward >= 0.3)
+    pred_score_fail = (pred_score >= 0.3)
+    fail_acc = pred_score_fail[fail_mask].float().mean()
+    percent_fail = fail_mask.sum()/len(reward)
+
+    return all_acc, (positive_acc,percent_positive), (negative_acc,percent_negative),(fail_acc, percent_fail)
+
+
+def critic_forward(batch, network, device=None, is_val=False):
     # zhp: need to change: add normal to point feature
     table_points, leg_points, sampled_point, sampled_normal, action_direct, reward = batch
-
+    
     pcs = table_points.to(device)
     sampled_point = sampled_point.to(device)
     action_direct = action_direct.to(device)
     reward = reward.to(device)  
-
     pred_score = network.forward(pcs, sampled_point, action_direct)   # after sigmoid
-    loss = network.get_ce_loss_total(pred_score, reward)
-    total_loss = loss.mean()
-
-
-    # if is_val:
-    #     pred = pred_score.detach().cpu().numpy() > conf.critic_score_threshold
-    #     Fscore, precision, recall, accu = utils.cal_Fscore(np.array(pred, dtype=np.int32), gt_result.detach().cpu().numpy())
-
-    # display information
-    data_split = 'val' if is_val else 'train'
-    # with torch.no_grad():
-
-    #     # log to tensorboard
-    #     if log_tb and tb_writer is not None:
-    #         tb_writer.add_scalar('critic_loss', total_loss.item(), step)
-    #         tb_writer.add_scalar('critic_lr', lr, step)
-    #     if is_val and log_tb and tb_writer is not None:
-    #         tb_writer.add_scalar('Fscore', Fscore, step)
-    #         tb_writer.add_scalar('precision', precision, step)
-    #         tb_writer.add_scalar('recall', recall, step)
-    #         tb_writer.add_scalar('accu', accu, step)
-
-
-    return total_loss
+    if not is_val:
+        criterion = torch.nn.MSELoss()
+        loss = criterion(pred_score, reward) *1000
+        total_loss = loss.mean()
+        all_acc, positive, negative, fail = get_acc(reward, pred_score)
+        return total_loss, all_acc, positive, negative, fail
+    else: 
+        return get_acc(reward, pred_score)
 
 
 if __name__ == '__main__':

@@ -319,7 +319,6 @@ def depth_image_to_point_cloud_GPU(depth_image, camera_view_matrix, camera_proj_
 
     return points, normals
 
-
 def capture_pc(env, camera_handle):
     # camera_handle = env.camera_handles["front"][0]
     cam_proj = torch.tensor(env.isaac_gym.get_camera_proj_matrix(env.sim, env.envs[0], camera_handle)).to(env.device)
@@ -350,7 +349,6 @@ def capture_pc(env, camera_handle):
     segments = seg_image.flatten()
 
     return points, normals, segments
-
 
 def farthest_point_sample_GPU(points, npoint): 
 
@@ -451,8 +449,6 @@ if __name__ == "__main__":
             mask = (segments == 1) # | (segments == 2)
             points_ = points_[mask]
             normals_ = normals_[mask]
-
-            
 
             if points is None:
                 points = points_

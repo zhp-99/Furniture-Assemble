@@ -58,7 +58,7 @@ distance_np = 0.1 - distance_np
 distance_normalized = (distance_np - distance_np.min()) / (distance_np.max() - distance_np.min())
 
 
-all_points = np.concatenate([sampled_points_np, terminated_sampled_points_np, leg_points], axis=0)
+all_points = np.concatenate([sampled_points_np, leg_points], axis=0)
 
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(all_points)
@@ -67,10 +67,10 @@ pcd.points = o3d.utility.Vector3dVector(all_points)
 colors = plt.get_cmap("coolwarm")(distance_normalized)[:, :3]
 # colors = np.zeros((distance_normalized.shape[0], 3))
 colors[:, 0] = distance_normalized  # 将 distance_np 作为每一行的第一个值
-terminated_color = np.zeros((terminated_sampled_points_np.shape[0], 3))
+# terminated_color = np.zeros((terminated_sampled_points_np.shape[0], 3))
 
 leg_colors = np.zeros((leg_points.shape[0], 3))
-all_colors = np.concatenate([colors, terminated_color, leg_colors], axis=0)
+all_colors = np.concatenate([colors, leg_colors], axis=0)
 
 pcd.colors = o3d.utility.Vector3dVector(all_colors)
 
