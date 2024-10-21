@@ -41,7 +41,8 @@ config: Dict[str, Any] = {
             "drawer": 0.065,
             "round_table": 0.065,
             "cabinet": 0.08,
-            "lamp": 0.07,
+            # "lamp": 0.07,
+            "lamp": 0.12
         },
         "position_limits": [
             [0.3, 0.8],

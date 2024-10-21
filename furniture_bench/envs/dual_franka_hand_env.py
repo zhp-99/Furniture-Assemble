@@ -88,6 +88,8 @@ class FurnitureSimEnv(gym.Env):
         record: bool = False,
         max_env_steps: int = 3000,
         act_rot_repr: str = "quat",
+        assembled: bool = False,
+        set_friction: bool = True,
         **kwargs,
     ):
         """
@@ -117,8 +119,10 @@ class FurnitureSimEnv(gym.Env):
         self.task_config = task_config
         self.part1_name = self.task_config[furniture]["part_names"][0]
         self.part2_name = self.task_config[furniture]["part_names"][1]
-        self.device = torch.device("cuda", compute_device_id)
+        self.assembled = assembled
+        self.set_friction = set_friction
 
+        self.device = torch.device("cuda", compute_device_id)
         self.assemble_idx = 0
         # Furniture for each environment (reward, reset).
         self.furnitures = [furniture_factory(furniture) for _ in range(num_envs)]
@@ -516,25 +520,27 @@ class FurnitureSimEnv(gym.Env):
                     env, part_handle
                 )
                 # part_props[0].friction = sim_config["parts"]["friction"]
-                if part.name == self.part1_name:
-                    part_props[0].friction = 0.03
-                elif part.name == self.part2_name:
-                    part_props[0].friction = 2
-                else:
-                    raise ValueError(f"Unknown part name: {part.name}")
-
-                # part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
-                #     env, part_handle
-                # )
-                # print("part_body_props mass: ", part_body_props[0].mass)
-                # input()
-                # part_body_props[0].mass = 1
-                # self.isaac_gym.set_actor_rigid_body_properties(
-                #     env, part_handle, part_body_props
-                # )
+                if self.set_friction:
+                    if part.name == self.part1_name:
+                        part_props[0].friction = self.task_config[self.furniture_name]["part_frictions"][0]
+                    elif part.name == self.part2_name:
+                        part_props[0].friction = self.task_config[self.furniture_name]["part_frictions"][1]
+                    else:
+                        raise ValueError(f"Unknown part name: {part.name}")
+                
                 self.isaac_gym.set_actor_rigid_shape_properties(
-                    env, part_handle, part_props
+                        env, part_handle, part_props
                 )
+
+                # if part.name == self.part1_name:
+                #     part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
+                #         env, part_handle
+                #     )
+                #     part_body_props[0].mass = 1
+                #     self.isaac_gym.set_actor_rigid_body_properties(
+                #         env, part_handle, part_body_props
+                #     )
+
                 if part.name == self.part1_name:
                     segmentation_id = 1
                 elif part.name == self.part2_name:
@@ -543,7 +549,7 @@ class FurnitureSimEnv(gym.Env):
                     raise ValueError(f"Unknown part name: {part.name}")
                 
                 self.isaac_gym.set_rigid_body_segmentation_id(
-                    env, part_handle,0,segmentation_id
+                    env, part_handle, 0, segmentation_id
                 )
                 # print("part name: ", part.name)
                 if self.part_idxs.get(part.name) is None:
@@ -634,17 +640,21 @@ class FurnitureSimEnv(gym.Env):
                 self.part1_pos = pos
                 self.part1_ori = ori
             elif part.name == self.part2_name:
-                default_assembled_pose = config["furniture"][self.furniture_name][self.part2_name]["default_assembled_pose"]
-                scaled_default_assembled_pose = default_assembled_pose.copy()
-                scaled_default_assembled_pose[:3, 3] *= self.furniture_scale_factor
-
+                if self.assembled:
+                    default_assembled_pose = config["furniture"][self.furniture_name][self.part2_name]["default_assembled_pose"]
+                    scaled_default_assembled_pose = default_assembled_pose.copy()
+                    scaled_default_assembled_pose[:3, 3] *= self.furniture_scale_factor
+                else:
+                    scaled_default_assembled_pose = np.load(
+                        self.task_config[self.furniture_name]["disassembled_pose_path"],
+                        allow_pickle=True,
+                    )
                 table_pose = get_mat(self.part1_pos, self.part1_ori)
                 leg_pose = (
                     table_pose
                     @ scaled_default_assembled_pose
                 )
                 pos = leg_pose[:3, 3]
-                pos[2] -= self.task_config[self.furniture_name]["pre_assemble_derivation"]
                 ori = T.to_hom_ori(leg_pose[:3, :3])
             else:
                 raise ValueError("Unknown part name")

@@ -116,7 +116,16 @@ def collect_data(furniture_name, part1_name, part2_name):
         env.isaac_gym.refresh_net_contact_force_tensor(env.sim)
         _net_cf = env.isaac_gym.acquire_net_contact_force_tensor(env.sim)
      
-        env.set_hand_transform(hand_pos, hand_ori)
+        # Set hand pos
+        try:
+            env.set_hand_transform(hand_pos, hand_ori)
+        except:
+            print("Hand pos out of bound:", hand_pos, hand_ori)
+            env.refresh()
+            env.isaac_gym.refresh_net_contact_force_tensor(env.sim)
+            _net_cf = env.isaac_gym.acquire_net_contact_force_tensor(env.sim)
+            continue
+
         contact_flag = False
         fake_contact_flag = False
         for i in range(10):
@@ -149,7 +158,7 @@ def collect_data(furniture_name, part1_name, part2_name):
                 rb_states[part_idxs[part1_name]][0][:3],
                 C.quat2mat(rb_states[part_idxs[part1_name]][0][3:7]),
             )
-            if not satisfy(ori_part1_pose, start_part1_pose):
+            if not satisfy(ori_part1_pose, start_part1_pose, pos_error_threshold=0.03):
                 print("Part1 Moved")
                 all_finished = False
 
@@ -167,7 +176,7 @@ def collect_data(furniture_name, part1_name, part2_name):
                     rb_states[part_idxs[part1_name]][0][:3],
                     C.quat2mat(rb_states[part_idxs[part1_name]][0][3:7]),
                 )
-                distance = (final_part1_pose[:3,3]-ori_part1_pose[:3,3]).abs().sum()
+                distance = (final_part1_pose[:3,3]-start_part1_pose[:3,3]).abs().sum()
                 print("Distance: ", distance)
                 # save data
                 # torch.save({
@@ -233,6 +242,7 @@ def collect_other():
 
 if __name__ == "__main__":
     furniture_name = "square_table"
+    # furniture_name = "lamp"
     collect_data(furniture_name, task_config[furniture_name]["part_names"][0], task_config[furniture_name]["part_names"][1])
     
 

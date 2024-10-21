@@ -48,7 +48,6 @@ def satisfy(
         (target[:3, :3] - current[:3, :3]).abs().sum() < ori_error_threshold
     ):
         return True
-
     return False
 
 def gripper_less(gripper_width, target_width):
@@ -126,49 +125,6 @@ def reach_target(env, target_ee_states, thresholds, is_gripper):
         
         env.step(action)
         spend_time += 1
-
-def act_phase(env, phase, func_map, last_target_ee_states=None):
-    rb_states = env.rb_states
-    part_idxs = env.part_idxs
-
-    leg_pose = C.to_homogeneous(
-            rb_states[part_idxs["square_table_leg4"]][0][:3],
-            C.quat2mat(rb_states[part_idxs["square_table_leg4"]][0][3:7]),
-        )
-
-    table_pose = C.to_homogeneous(
-        rb_states[part_idxs["square_table_top"]][0][:3],
-        C.quat2mat(rb_states[part_idxs["square_table_top"]][0][3:7]),
-    )
-
-    # print(leg_pose)
-    # input()
-
-
-
-    if last_target_ee_states is not None:
-        ee_pos_1, ee_quat_1, gripper_1 = last_target_ee_states[0]
-        # ee_pos_2, ee_quat_2, gripper_2 = last_target_ee_states[1]
-    else:
-        # ee_pos_1, ee_quat_1, ee_pos_2, ee_quat_2 = env.get_ee_pose_world()
-        # gripper_1, gripper_2 = env.last_grasp_1, env.last_grasp_2
-        ee_pos_1, ee_quat_1 = env.get_ee_pose_world()
-        gripper_1 = env.last_grasp_1
-
-    ee_pos_1, ee_quat_1 = ee_pos_1.squeeze(), ee_quat_1.squeeze()
-    # ee_pos_2, ee_quat_2 = ee_pos_2.squeeze(), ee_quat_2.squeeze()
-    # gripper_1, gripper_2 = gripper_1.squeeze(), gripper_2.squeeze()
-    gripper_1 = gripper_1.squeeze()
-
-
-    start_ee_states = [(ee_pos_1, ee_quat_1, gripper_1)]#, (ee_pos_2, ee_quat_2, gripper_2)]
-    env_states = [table_pose, leg_pose]
-
-    target_ee_states, thresholds, is_gripper = func_map[phase](env, start_ee_states, env_states)
-    # print("Start phase: ", phase)
-    result = reach_target(env, target_ee_states, thresholds, is_gripper)
-    # print("End phase: ", phase)
-    return target_ee_states, result
 
 # Point Cloud Operations
 def depth_image_to_point_cloud_GPU(depth_image, camera_view_matrix, camera_proj_matrix, width:float, height:float, depth_bar:float=None, device:torch.device='cuda:0'):
