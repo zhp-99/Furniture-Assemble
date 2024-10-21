@@ -31,7 +31,7 @@ from furniture_bench.envs.initialization_mode import Randomness, str_to_enum
 from furniture_bench.controllers.osc import osc_factory
 from furniture_bench.furniture import furniture_factory
 from furniture_bench.sim_config import sim_config
-from furniture_bench.config import ROBOT_HEIGHT, config
+from furniture_bench.assemble_config import ROBOT_HEIGHT, config
 from furniture_bench.utils.pose import get_mat, rot_mat
 from furniture_bench.envs.observation import (
     FULL_OBS,
@@ -40,6 +40,7 @@ from furniture_bench.envs.observation import (
 )
 from furniture_bench.robot.robot_state import ROBOT_STATE_DIMS
 from furniture_bench.furniture.parts.part import Part
+from workspace.tasks.task_config import task_config
 
 
 ASSET_ROOT = str(Path(__file__).parent.parent.absolute() / "assets")
@@ -112,6 +113,10 @@ class FurnitureSimEnv(gym.Env):
             act_rot_repr (str): Representation of rotation for action space. Options are 'quat', 'axis', or 'rot_6d'.
         """
         super(FurnitureSimEnv, self).__init__()
+        # zhp: init for env
+        self.task_config = task_config
+        self.part1_name = self.task_config[furniture]["part_names"][0]
+        self.part2_name = self.task_config[furniture]["part_names"][1]
         self.device = torch.device("cuda", compute_device_id)
 
         self.assemble_idx = 0
@@ -130,18 +135,11 @@ class FurnitureSimEnv(gym.Env):
         self.furniture_name = furniture
         self.num_envs = num_envs
         self.obs_keys = obs_keys or DEFAULT_VISUAL_OBS
-        # self.robot_state_keys = [
-        #     k.split("/")[1] for k in self.obs_keys if k.startswith("robot_state")
-        # ]
         self.robot_state_keys = [
             "ee_pos_1",
             "ee_quat_1",
             "ee_pos_vel_1",
             "ee_ori_vel_1",
-            # "ee_pos_2",
-            # "ee_quat_2",
-            # "ee_pos_vel_2",
-            # "ee_ori_vel_2",
             "gripper_width",
         ]
         self.concat_robot_state = concat_robot_state
@@ -210,9 +208,6 @@ class FurnitureSimEnv(gym.Env):
                 30,
                 (self.img_size[0]*2, self.img_size[1]),  # Wrist and front cameras.
             )
-            # print("Writer size")
-            # print((self.img_size[1]*2, self.img_size[0]))
-            # input()
 
         if act_rot_repr != "quat" and act_rot_repr != "axis" and act_rot_repr != "rot_6d":
             raise ValueError(f"Invalid rotation representation: {act_rot_repr}")
@@ -251,26 +246,6 @@ class FurnitureSimEnv(gym.Env):
             [0, 0, 0],
         )
 
-        # self.temp_franka_pose_1 = gymapi.Transform()
-        # self.temp_franka_pose_1.p = gymapi.Vec3(
-        #     0.5 * -table_pos.x + 0.1, 0.3, table_surface_z + ROBOT_HEIGHT +0.5
-        # )
-
-        # self.temp_franka_from_origin_mat_1 = get_mat(
-        #     [self.franka_pose_1.p.x, self.franka_pose_1.p.y, self.franka_pose_1.p.z],
-        #     [0, 0, 0],
-        # )
-
-        # zhp: changed
-        # self.franka_pose_2 = gymapi.Transform()
-        # self.franka_pose_2.p = gymapi.Vec3(
-        #     0.5 * -table_pos.x + 0.1, -0.3, table_surface_z + ROBOT_HEIGHT
-        # )
-        # self.franka_from_origin_mat_2 = get_mat(
-        #     [self.franka_pose_2.p.x, self.franka_pose_2.p.y, self.franka_pose_2.p.z],
-        #     [0, 0, 0],
-        # )
-
         self.base_tag_from_robot_mat = config["robot"]["tag_base_from_robot_base"]
 
         franka_link_dict = self.isaac_gym.get_asset_rigid_body_dict(self.franka_asset)
@@ -280,7 +255,7 @@ class FurnitureSimEnv(gym.Env):
         # Create assets.
         self.part_assets = {}
         for part in self.furniture.parts:
-            if part.name not in ["square_table_top","square_table_leg4"]:
+            if part.name not in self.task_config[self.furniture_name]["part_names"]:
                     continue
             asset_option = sim_config["asset"][part.name]
             self.part_assets[part.name] = self.isaac_gym.load_asset(
@@ -299,18 +274,8 @@ class FurnitureSimEnv(gym.Env):
         self.ee_idxs_1 = []
         self.ee_handles_1 = []
         self.osc_ctrls_1 = []
-
-        #zhp changed
-        # self.ee_idxs_2 = []
-        # self.ee_handles_2 = []
-        # self.osc_ctrls_2 = []
-
         self.base_idxs_1 = []
         self.franka_handles_1 = []
-
-        # self.base_idxs_2 = []
-        # self.franka_handles_2 = []
-
         self.part_idxs = {}
         
 
@@ -368,10 +333,6 @@ class FurnitureSimEnv(gym.Env):
             self.isaac_gym.set_actor_rigid_shape_properties(
                 env, fixed_table_handle, fixed_table_props
             )
-            
-            
-
-
 
             self.base_tag_pose = gymapi.Transform()
             base_tag_pos = T.pos_from_mat(config["robot"]["tag_base_from_robot_base"])
@@ -444,13 +405,6 @@ class FurnitureSimEnv(gym.Env):
             self.isaac_gym.enable_actor_dof_force_sensors(env, franka_handle_1)
             self.franka_handles_1.append(franka_handle_1)
 
-            # franka_handle_2 = self.isaac_gym.create_actor(
-            #     env, self.franka_asset, self.franka_pose_2, "franka_2", i, 0
-            # )
-            # self.isaac_gym.enable_actor_dof_force_sensors(env, franka_handle_2)
-
-            # self.franka_handles_2.append(franka_handle_2)
-
             # Get global index of hand and base.
             self.ee_idxs_1.append(
                 self.isaac_gym.get_actor_rigid_body_index(
@@ -467,23 +421,6 @@ class FurnitureSimEnv(gym.Env):
                     env, franka_handle_1, self.franka_base_index, gymapi.DOMAIN_SIM
                 )
             )
-
-            #zhp: changed
-            # self.ee_idxs_2.append(
-            #     self.isaac_gym.get_actor_rigid_body_index(
-            #         env, franka_handle_2, self.franka_ee_index, gymapi.DOMAIN_SIM
-            #     )
-            # )
-            # self.ee_handles_2.append(
-            #     self.isaac_gym.find_actor_rigid_body_handle(
-            #         env, franka_handle_2, "k_ee_link"
-            #     )
-            # )
-            # self.base_idxs_2.append(
-            #     self.isaac_gym.get_actor_rigid_body_index(
-            #         env, franka_handle_2, self.franka_base_index, gymapi.DOMAIN_SIM
-            #     )
-            # )
 
             # Set dof properties.
             franka_dof_props = self.isaac_gym.get_asset_dof_properties(
@@ -534,18 +471,19 @@ class FurnitureSimEnv(gym.Env):
             # Add furniture parts.
             poses = []
             for part in self.furniture.parts:
-                if part.name not in ["square_table_top","square_table_leg4"]:
+                if part.name not in self.task_config[self.furniture_name]["part_names"]:
                     continue
                 # print("part name: ", part.name)
-                if part.name == "square_table_top":
-                    # pos = [0,0.24,-0.015625]
-                    # ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
-                    # pos, ori = self._get_reset_pose(part)
-                    pos = [0,0.24,-0.015625]
-                    ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
+                # zhp: need?
+                # if part.name == "square_table_top":
+                #     # pos = [0,0.24,-0.015625]
+                #     # ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
+                #     # pos, ori = self._get_reset_pose(part)
+                #     pos = [0,0.24,-0.015625]
+                #     ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
                     
-                else:
-                    pos, ori = self._get_reset_pose(part)
+                # else:
+                pos, ori = self._get_reset_pose(part)
                     # square_table_leg4
 
                 # print("pos: ", pos)
@@ -578,10 +516,12 @@ class FurnitureSimEnv(gym.Env):
                     env, part_handle
                 )
                 # part_props[0].friction = sim_config["parts"]["friction"]
-                if part.name == "square_table_top":
+                if part.name == self.part1_name:
                     part_props[0].friction = 0.03
-                else:
+                elif part.name == self.part2_name:
                     part_props[0].friction = 2
+                else:
+                    raise ValueError(f"Unknown part name: {part.name}")
 
                 # part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
                 #     env, part_handle
@@ -595,9 +535,9 @@ class FurnitureSimEnv(gym.Env):
                 self.isaac_gym.set_actor_rigid_shape_properties(
                     env, part_handle, part_props
                 )
-                if part.name == "square_table_top":
+                if part.name == self.part1_name:
                     segmentation_id = 1
-                elif part.name == "square_table_leg4":
+                elif part.name == self.part2_name:
                     segmentation_id = 2
                 else:
                     raise ValueError(f"Unknown part name: {part.name}")
@@ -613,7 +553,7 @@ class FurnitureSimEnv(gym.Env):
 
             self.parts_handles = {}
             for part in self.furniture.parts:
-                if part.name not in ["square_table_top","square_table_leg4"]:
+                if part.name not in self.task_config[self.furniture_name]["part_names"]:
                     continue
                 self.parts_handles[part.name] = self.isaac_gym.find_actor_index(
                     env, part.name, gymapi.DOMAIN_ENV
@@ -629,7 +569,7 @@ class FurnitureSimEnv(gym.Env):
             # self.franka_actor_idx_all_2.append(self.isaac_gym.find_actor_index(self.envs[env_idx], 'franka_2', gymapi.DOMAIN_SIM))
             self.part_actor_idx_by_env[env_idx] = []
             for part in self.furnitures[env_idx].parts:
-                if part.name not in ["square_table_top","square_table_leg4"]:
+                if part.name not in self.task_config[self.furniture_name]["part_names"]:
                     continue
                 part_actor_idx = self.isaac_gym.find_actor_index(self.envs[env_idx], part.name, gymapi.DOMAIN_SIM)
                 self.part_actor_idx_all.append(part_actor_idx)
@@ -685,24 +625,29 @@ class FurnitureSimEnv(gym.Env):
             pos = part.reset_pos[self.from_skill]
             ori = part.reset_ori[self.from_skill]
         else:
-            if part.name == "square_table_top":
+            # zhp: need to change
+            if part.name == self.part1_name:
                 # part.reset_pos = [0,0.24,-0.015625]
                 # part.reset_ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
-                pos = [0,0.24,-0.015625]
-                ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
-            else:
-                default_assembled_pose = config["furniture"]["square_table"]["square_table_leg4"]["default_assembled_pose"]
+                pos = config["furniture"][self.furniture_name][self.part1_name]["reset_pos"][0]
+                ori = config["furniture"][self.furniture_name][self.part1_name]["reset_ori"][0]
+                self.part1_pos = pos
+                self.part1_ori = ori
+            elif part.name == self.part2_name:
+                default_assembled_pose = config["furniture"][self.furniture_name][self.part2_name]["default_assembled_pose"]
                 scaled_default_assembled_pose = default_assembled_pose.copy()
                 scaled_default_assembled_pose[:3, 3] *= self.furniture_scale_factor
 
-                table_pose = get_mat([0,0.24,-0.015625], np.array([-np.pi / 2, 0, np.pi]))
+                table_pose = get_mat(self.part1_pos, self.part1_ori)
                 leg_pose = (
                     table_pose
                     @ scaled_default_assembled_pose
                 )
                 pos = leg_pose[:3, 3]
-                pos[2] -= 0.018
+                pos[2] -= self.task_config[self.furniture_name]["pre_assemble_derivation"]
                 ori = T.to_hom_ori(leg_pose[:3, :3])
+            else:
+                raise ValueError("Unknown part name")
         return pos, ori
 
     def set_viewer(self):
@@ -1622,7 +1567,7 @@ class FurnitureSimEnv(gym.Env):
             parts_poses (np.ndarray): The poses of the parts. If None, the parts will be reset to the initial pose.
         """
         for part_idx, part in enumerate(self.furnitures[env_idx].parts):
-            if part.name not in ["square_table_top","square_table_leg4"]:
+            if part.name not in self.task_config[self.furniture_name]:
                     continue
             # Use the given pose.
             if parts_poses is not None:
