@@ -33,13 +33,14 @@ config: Dict[str, Any] = {
             (0.23 + 0.0715, 0, -ROBOT_HEIGHT), (np.pi, 0, np.pi / 2)
         ),  # Relative pose of the base tag from the robot base. This can be used to convert the pose in the base tag's coordinate to the robot's coordinate.
         "max_gripper_width": {
-            "square_table": 0.065,
-            "one_leg": 0.065,
-            "desk": 0.065,
-            "stool": 0.065,
-            "chair": 0.065,
-            "drawer": 0.065,
-            "round_table": 0.065,
+            "square_table": 0.08,
+            "one_leg": 0.08,
+            # "desk": 0.065,
+            "desk": 0.08,
+            "stool": 0.08,
+            "chair": 0.08,
+            "drawer": 0.08,
+            "round_table": 0.08,
             "cabinet": 0.08,
             # "lamp": 0.07,
             "lamp": 0.12
@@ -504,7 +505,7 @@ config: Dict[str, Any] = {
                     ],
                 ],
             },
-            "leg1": {
+            "desk_leg1": {
                 "name": "desk_leg1",
                 "asset_file": "furniture/urdf/desk/desk_leg1.urdf",
                 "ids": [113, 114, 115, 116],
@@ -552,7 +553,7 @@ config: Dict[str, Any] = {
                     ],
                 ],
             },
-            "leg2": {
+            "desk_leg2": {
                 "name": "desk_leg2",
                 "asset_file": "furniture/urdf/desk/desk_leg2.urdf",
                 "ids": [117, 118, 119, 120],
@@ -600,7 +601,7 @@ config: Dict[str, Any] = {
                     ],
                 ],
             },
-            "leg3": {
+            "desk_leg3": {
                 "name": "desk_leg3",
                 "asset_file": "furniture/urdf/desk/desk_leg3.urdf",
                 "ids": [121, 122, 123, 124],
@@ -648,7 +649,7 @@ config: Dict[str, Any] = {
                     ],
                 ],
             },
-            "leg4": {
+            "desk_leg4": {
                 "name": "desk_leg4",
                 "asset_file": "furniture/urdf/desk/desk_leg4.urdf",
                 "ids": [125, 126, 127, 128],
@@ -954,7 +955,8 @@ config: Dict[str, Any] = {
                 "ids": [53, 54, 55, 56, 57],
                 "reset_pos": [[-0.11, 0.12, -0.0255]] * 5,
                 "reset_ori": [rot_mat(np.array([np.pi / 2, 0, 0]), hom=True)] * 5,
-                "default_assembled_pose": get_mat([0, -0.0345, 0.008], [0, 0, 0]),
+                # "default_assembled_pose": get_mat([0, -0.0345, 0.008], [0, 0, 0]),
+                "default_assembled_pose": get_mat([0, -0.0300, 0.008], [0, 0, 0]),
                 "high_rand_reset_pos": [
                     [np.array([-0.1, 0.293, -0.029])],
                     [np.array([0.069, 0.137, -0.027])],
@@ -1000,7 +1002,8 @@ config: Dict[str, Any] = {
                 "reset_pos": [[-0.11, 0.25, -0.0255]] * 4 + [[0.055, 0.30, -0.03075]],
                 "reset_ori": [rot_mat(np.array([np.pi / 2, 0, 0]), hom=True)] * 4
                 + [rot_mat([np.pi / 2, 0, -np.pi / 2], hom=True)],
-                "default_assembled_pose": get_mat([0, 0.0105, 0.008], [0, 0, 0]),
+                # "default_assembled_pose": get_mat([0, 0.0105, 0.008], [0, 0, 0]),
+                "default_assembled_pose": get_mat([0, 0.0095, 0.008], [0, 0, 0]),
                 "high_rand_reset_pos": [
                     [np.array([0.086, 0.173, -0.029])],
                     [np.array([0.034, 0.261, -0.027])],

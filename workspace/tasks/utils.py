@@ -1,7 +1,7 @@
+from isaacgym import gymapi, gymtorch
 import torch
 import numpy as np
 import furniture_bench.controllers.control_utils as C
-from isaacgym import gymapi, gymtorch
 
 # Matrix Operations
 def rot_mat(angles, hom: bool = False):
@@ -22,6 +22,52 @@ def rot_mat(angles, hom: bool = False):
         M[3, 3] = 1.0
         return M
     return R
+
+def rot_mat_to_angles(R):
+    """
+    Given a 3x3 rotation matrix, compute the rotation angles (x, y, z).
+    Args:
+        R: 3x3 rotation matrix.
+    Returns:
+        angles: (x, y, z) rotation angles.
+    """
+    sy = np.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
+
+    singular = sy < 1e-6
+
+    if not singular:
+        x = np.arctan2(R[2, 1], R[2, 2])
+        y = np.arctan2(-R[2, 0], sy)
+        z = np.arctan2(R[1, 0], R[0, 0])
+    else:
+        x = np.arctan2(-R[1, 2], R[1, 1])
+        y = np.arctan2(-R[2, 0], sy)
+        z = 0
+
+    return np.array([x, y, z])
+
+def rot_mat_to_angles_tensor(R, device):
+    """
+    Given a 3x3 rotation matrix, compute the rotation angles (x, y, z).
+    Args:
+        R: 3x3 rotation matrix.
+    Returns:
+        angles: (x, y, z) rotation angles.
+    """
+    sy = torch.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
+
+    singular = sy < 1e-6
+
+    if not singular:
+        x = torch.atan2(R[2, 1], R[2, 2])
+        y = torch.atan2(-R[2, 0], sy)
+        z = torch.atan2(R[1, 0], R[0, 0])
+    else:
+        x = torch.atan2(-R[1, 2], R[1, 1])
+        y = torch.atan2(-R[2, 0], sy)
+        z = 0
+
+    return torch.tensor([x, y, z], device=device)
 
 def rot_mat_tensor(x, y, z, device):
     return torch.tensor(rot_mat([x, y, z], hom=True), device=device).float()
@@ -94,7 +140,7 @@ def get_action(env, start_pos, start_quat, target_pos, target_quat, gripper):
     action = torch.concat([delta_pos, delta_quat, gripper]).unsqueeze(0)
     return action
 
-def reach_target(env, target_ee_states, thresholds, is_gripper):
+def reach_target(env, target_ee_states, thresholds, is_gripper, gripper_sepnd_time=10, pose_spend_time=30):
     target_pos_1, target_quat_1, gripper_1 = target_ee_states[0]
     # target_pos_2, target_quat_2, gripper_2 = target_ee_states[1]
     pos_err_1, ori_err_1 = thresholds[0]
@@ -113,16 +159,14 @@ def reach_target(env, target_ee_states, thresholds, is_gripper):
         half_width = 0
 
         if is_gripper:
-            if gripper_less(gripper_width, 2 * half_width + 0.001) or spend_time > 10:
+            if gripper_less(gripper_width, 2 * half_width + 0.001) or spend_time > gripper_sepnd_time:
                 return True
         else:
             if satisfy(ee_pose_1, target_pose_1, pos_err_1, ori_err_1): # and satisfy(ee_pose_2, target_pose_2, pos_err_2, ori_err_2, spend_time=spend_time):
                 return True
-            if spend_time > 30:
+            if spend_time > pose_spend_time:
                 return False
             
-        
-        
         env.step(action)
         spend_time += 1
 

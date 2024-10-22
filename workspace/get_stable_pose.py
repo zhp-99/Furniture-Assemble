@@ -32,6 +32,8 @@ def disassemble(furniture_name, part1_name, part2_name):
     env.refresh()
 
     # Start to perform the task
+    rb_states = env.rb_states
+    part_idxs = env.part_idxs
     task_module = importlib.import_module(f'tasks.{furniture_name}')
     prepare = getattr(task_module, 'prepare')
     perform_disassemble = getattr(task_module, 'perform_disassemble')
@@ -39,10 +41,13 @@ def disassemble(furniture_name, part1_name, part2_name):
     target_ee_states = None
     target_ee_states, result = prepare(env, target_ee_states)
 
+    part2_pose = C.to_homogeneous(
+            rb_states[part_idxs[part2_name]][0][:3],
+            C.quat2mat(rb_states[part_idxs[part2_name]][0][3:7]),
+    )
+
     all_finished = perform_disassemble(env, target_ee_states)
 
-    rb_states = env.rb_states
-    part_idxs = env.part_idxs
     part1_pose = C.to_homogeneous(
             rb_states[part_idxs[part1_name]][0][:3],
             C.quat2mat(rb_states[part_idxs[part1_name]][0][3:7]),
@@ -51,8 +56,6 @@ def disassemble(furniture_name, part1_name, part2_name):
             rb_states[part_idxs[part2_name]][0][:3],
             C.quat2mat(rb_states[part_idxs[part2_name]][0][3:7]),
     )
-
-
     # Compute relative pose
     # Use torch to compute relative pose
     relative_pose = torch.linalg.inv(part1_pose) @ part2_pose
@@ -65,7 +68,7 @@ def disassemble(furniture_name, part1_name, part2_name):
 
 if __name__ == "__main__":
     # furniture_name = "square_table"
-    furniture_name = "square_table"
+    furniture_name = "desk"
     part1_name = task_config[furniture_name]["part_names"][0]
     part2_name = task_config[furniture_name]["part_names"][1]
     disassemble(furniture_name, part1_name, part2_name)

@@ -139,10 +139,12 @@ def collect_data(furniture_name, part1_name, part2_name):
 
             if torch.any(torch.abs(base_table_cf[:2]) > 50):
                 contact_flag = True
+                print("Base Table Contact")
                 break
                 
             if torch.any(torch.abs(part1_top_cf[:2]) > 50):
                 contact_flag = True
+                print("Part1 Contact")
                 break
         
         # Start to perform the task
@@ -230,10 +232,12 @@ def collect_data(furniture_name, part1_name, part2_name):
 def collect_other():
     env = gym.make(
         "dual-franka-hand-v0",
-        furniture='lamp',
+        furniture='drawer',
         num_envs=1,
         # record=True,
         resize_img=False,
+        set_friction=False,
+        assembled=True,
     )
     env.reset()
     env.refresh()
@@ -241,8 +245,11 @@ def collect_other():
         wait(env)
 
 if __name__ == "__main__":
-    furniture_name = "square_table"
+    # lamp|square_table|desk|drawer|cabinet|round_table|stool|chair|one_leg
+    # furniture_name = "desk"
     # furniture_name = "lamp"
-    collect_data(furniture_name, task_config[furniture_name]["part_names"][0], task_config[furniture_name]["part_names"][1])
+    # furniture_name = "square_table"
+    # collect_data(furniture_name, task_config[furniture_name]["part_names"][0], task_config[furniture_name]["part_names"][1])
+    collect_other()
     
 

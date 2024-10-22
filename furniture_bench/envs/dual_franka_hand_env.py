@@ -119,6 +119,7 @@ class FurnitureSimEnv(gym.Env):
         self.task_config = task_config
         self.part1_name = self.task_config[furniture]["part_names"][0]
         self.part2_name = self.task_config[furniture]["part_names"][1]
+        # self.part2_name = None
         self.assembled = assembled
         self.set_friction = set_friction
 
@@ -175,6 +176,7 @@ class FurnitureSimEnv(gym.Env):
 
         # zhp: properties
         self.furniture_scale_factor = 1.5
+        # self.furniture_scale_factor = 1.0
 
         # Simulator setup.
         self.isaac_gym = gymapi.acquire_gym()
@@ -262,6 +264,8 @@ class FurnitureSimEnv(gym.Env):
             if part.name not in self.task_config[self.furniture_name]["part_names"]:
                     continue
             asset_option = sim_config["asset"][part.name]
+            # zhp: for debug
+            # asset_option.fix_base_link = True
             self.part_assets[part.name] = self.isaac_gym.load_asset(
                 self.sim, ASSET_ROOT, part.asset_file, asset_option
             )
@@ -532,14 +536,19 @@ class FurnitureSimEnv(gym.Env):
                         env, part_handle, part_props
                 )
 
-                # if part.name == self.part1_name:
-                #     part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
-                #         env, part_handle
-                #     )
-                #     part_body_props[0].mass = 1
-                #     self.isaac_gym.set_actor_rigid_body_properties(
-                #         env, part_handle, part_body_props
-                #     )
+                if "part_mass" in self.task_config[self.furniture_name]:
+                    part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
+                        env, part_handle
+                    )
+                    if part.name == self.part1_name:
+                        part_body_props[0].mass = self.task_config[self.furniture_name]["part_mass"][0]
+                    elif part.name == self.part2_name:
+                        part_body_props[0].mass = self.task_config[self.furniture_name]["part_mass"][1]
+                    else:
+                        raise ValueError(f"Unknown part name: {part.name}")
+                    self.isaac_gym.set_actor_rigid_body_properties(
+                        env, part_handle, part_body_props
+                    )
 
                 if part.name == self.part1_name:
                     segmentation_id = 1
@@ -631,10 +640,7 @@ class FurnitureSimEnv(gym.Env):
             pos = part.reset_pos[self.from_skill]
             ori = part.reset_ori[self.from_skill]
         else:
-            # zhp: need to change
             if part.name == self.part1_name:
-                # part.reset_pos = [0,0.24,-0.015625]
-                # part.reset_ori = rot_mat(np.array([-np.pi / 2, 0, np.pi]), hom=True)
                 pos = config["furniture"][self.furniture_name][self.part1_name]["reset_pos"][0]
                 ori = config["furniture"][self.furniture_name][self.part1_name]["reset_ori"][0]
                 self.part1_pos = pos

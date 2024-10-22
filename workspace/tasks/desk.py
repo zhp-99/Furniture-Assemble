@@ -5,30 +5,17 @@ import furniture_bench.controllers.control_utils as C
 from tasks.utils import *
 from tasks.task_config import task_config
 
-furniture_name = "lamp"
+furniture_name = "desk"
 part1_name = task_config[furniture_name]["part_names"][0]
 part2_name = task_config[furniture_name]["part_names"][1]
 
 # Path Planning
-def pre_grasp_z(env, start_ee_states, env_states):
-    # start_pos_2,start_quat_2, gripper_2 = start_ee_states[1]
-    leg_pose = env_states[1]
-    target_ori_1 = rot_mat_tensor(np.pi, 0, 0, env.device)[:3, :3]
-    target_pos_1 = leg_pose[:3,3]
-    target_pos_1[2] += 0.08
-    target_quat_1 = C.mat2quat(target_ori_1)
-    gripper_action = -1
-    gripper = torch.tensor([gripper_action], device=env.device)
-    target_ee_states = [(target_pos_1, target_quat_1, gripper)]#, (start_pos_2, start_quat_2, gripper_2)]
-    thresholds = [(None,None),(None,None)]
-    return target_ee_states, thresholds, False
-
 def pre_grasp_xy(env, start_ee_states, env_states):
     # start_pos_2,start_quat_2, gripper_2 = start_ee_states[1]
     leg_pose = env_states[1]
     target_ori_1 = rot_mat_tensor(np.pi, 0, 0, env.device)[:3, :3]
     target_pos_1 = leg_pose[:3,3]
-    target_pos_1[2] += 0.12
+    target_pos_1[2] += 0.1
     target_quat_1 = C.mat2quat(target_ori_1)
     gripper_action = -1
     gripper = torch.tensor([gripper_action], device=env.device)
@@ -40,9 +27,15 @@ def pre_grasp(env, start_ee_states, env_states):
     start_pos_1,start_quat_1, gripper_1 = start_ee_states[0]
     # start_pos_2,start_quat_2, gripper_2 = start_ee_states[1]
     leg_pose = env_states[1]
-    target_ori_1 = rot_mat_tensor(np.pi, 0, 0, env.device)[:3, :3]
+    leg_forward = rot_mat_to_angles_tensor(leg_pose[:3, :3], env.device)[2]/np.pi
+    leg_faces = [((leg_forward + i*0.5 + 1) % 2) - 1 for i in range(4)]
+    abs_diff = [abs(x) for x in leg_faces]
+    min_index = abs_diff.index(min(abs_diff))
+    selected_face = leg_faces[min_index].item()
+
+    target_ori_1 = rot_mat_tensor(np.pi, 0, selected_face*np.pi, env.device)[:3, :3]
     target_pos_1 = leg_pose[:3,3]
-    target_pos_1[2] += 0.07
+    target_pos_1[2] += 0.05
     target_quat_1 = C.mat2quat(target_ori_1)
     target_ee_states = [(target_pos_1, target_quat_1, gripper_1)]#, (start_pos_2, start_quat_2, gripper_2)]
     thresholds = [(None,None),(None,None)]
@@ -50,13 +43,16 @@ def pre_grasp(env, start_ee_states, env_states):
 
 def screw(env, start_ee_states, env_states):
     start_pos_1,start_quat_1, gripper_1 = start_ee_states[0]
-    target_ori_1 = rot_mat_tensor(np.pi, 0, -np.pi / 2 - np.pi / 36, env.device)[
+    # start_pos_2,start_quat_2, gripper_2 = start_ee_states[1]
+    start_rot_mat = C.quat2mat(start_quat_1)
+    start_forward = rot_mat_to_angles_tensor(start_rot_mat, env.device)[2].item()
+    target_ori_1 = rot_mat_tensor(np.pi, 0, start_forward-np.pi / 2 - np.pi / 36, env.device)[
         :3, :3
     ]
     target_pos_1 = (start_pos_1)[:3]
-    target_pos_1[2] -= 0.005
+    # target_pos_1[2] -= 0.005
     target_quat_1 = C.mat2quat(target_ori_1)
-    target_ee_states = [(target_pos_1, target_quat_1, gripper_1)]
+    target_ee_states = [(target_pos_1, target_quat_1, gripper_1)]#, (start_pos_2, start_quat_2, gripper_2)]
     thresholds = [(None, 0.3),(None,None)]
     return target_ee_states, thresholds, False
 
@@ -97,7 +93,6 @@ func_map = {
     "pre_grasp": pre_grasp,
     "screw": screw,
     "pre_grasp_xy": pre_grasp_xy,
-    "pre_grasp_z": pre_grasp_z,
     "rev_screw": rev_screw,
 }
 
@@ -129,7 +124,7 @@ def act_phase(env, phase, func_map, last_target_ee_states=None):
     env_states = [part1_pose, part2_pose]
 
     target_ee_states, thresholds, is_gripper = func_map[phase](env, start_ee_states, env_states)
-    result = reach_target(env, target_ee_states, thresholds, is_gripper)
+    result = reach_target(env, target_ee_states, thresholds, is_gripper, gripper_sepnd_time=1)
 
     return target_ee_states, result
 
@@ -138,9 +133,25 @@ def prepare(env, prev_target_ee_states):
     return target_ee_states, result
 
 def perform(env, prev_target_ee_states):
-
     target_ee_states = prev_target_ee_states
     for i in range(2):
+        target_ee_states, result = act_phase(env, "pre_grasp", func_map, target_ee_states)
+        if not result:
+            print("Gripper Collision at Pre Grasp")
+            return False
+        target_ee_states, result = act_phase(env, "close_gripper", func_map, target_ee_states)
+        target_ee_states, result = act_phase(env, "screw", func_map, target_ee_states)
+        target_ee_states, result = act_phase(env, "release_gripper", func_map, target_ee_states)
+        target_ee_states, result = act_phase(env, "pre_grasp_xy", func_map, target_ee_states)
+        if not result:
+            print("Gripper Collision at Pre Grasp XY")
+            return False
+    return True
+
+def perform_disassemble(env, prev_target_ee_states):
+
+    target_ee_states = prev_target_ee_states
+    for i in range(3):
         # zhp: Efficiency? seems like release_gripper takes a while
         target_ee_states, result = act_phase(env, "pre_grasp_xy", func_map, prev_target_ee_states)
         target_ee_states, result = act_phase(env, "release_gripper", func_map, target_ee_states)
@@ -149,21 +160,8 @@ def perform(env, prev_target_ee_states):
             print("Gripper Collision at Pre Grasp")
             return False
         target_ee_states, result = act_phase(env, "close_gripper", func_map, target_ee_states)
-        target_ee_states, result = act_phase(env, "screw", func_map, target_ee_states)
-        
-    return True
-
-def perform_disassemble(env, prev_target_ee_states):
-
-    target_ee_states = prev_target_ee_states
-    for i in range(5):
-        # zhp: Efficiency? seems like release_gripper takes a while
-        target_ee_states, result = act_phase(env, "release_gripper", func_map, target_ee_states)
-        target_ee_states, result = act_phase(env, "pre_grasp", func_map, target_ee_states)
-        if not result:
-            print("Gripper Collision at Pre Grasp")
-            return False
-        target_ee_states, result = act_phase(env, "close_gripper", func_map, target_ee_states)
         target_ee_states, result = act_phase(env, "rev_screw", func_map, target_ee_states)
+    
+    target_ee_states, result = act_phase(env, "release_gripper", func_map, target_ee_states)
         
     return True
