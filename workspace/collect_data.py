@@ -15,15 +15,19 @@ from tqdm import trange
 import importlib
 
 from tasks.utils import *
-from tasks.task_config import task_config
+from tasks.task_config import all_task_config
 
-def collect_data(furniture_name, part1_name, part2_name):
+def collect_data(task_config):
+    furniture_name = task_config["furniture_name"]
+    part1_name = task_config["part_names"][0]
+    part2_name = task_config["part_names"][1]
     env = gym.make(
         "dual-franka-hand-v0",
         furniture=furniture_name,
         num_envs=1,
         # record=True,
         resize_img=False,
+        task_config=task_config
     )
 
     terminated_count = 15531
@@ -133,25 +137,27 @@ def collect_data(furniture_name, part1_name, part2_name):
             env.isaac_gym.refresh_net_contact_force_tensor(env.sim)
             _net_cf = env.isaac_gym.acquire_net_contact_force_tensor(env.sim)
             net_cf = gymtorch.wrap_tensor(_net_cf)
-            part1_top_cf = net_cf[part_idxs[part1_name]]
-            hand_cf = net_cf[env.franka_hand_rigid_index]
-            base_table_cf = net_cf[env.base_table_rigid_index]
+            part1_top_cf = net_cf[part_idxs[part1_name]].squeeze(0)
+            hand_cf = net_cf[env.franka_hand_rigid_index].squeeze(0)
+            base_table_cf = net_cf[env.base_table_rigid_index].squeeze(0)
 
             if torch.any(torch.abs(base_table_cf[:2]) > 50):
                 contact_flag = True
                 print("Base Table Contact")
                 break
                 
-            if torch.any(torch.abs(part1_top_cf[:2]) > 50):
+            if torch.any(torch.abs(part1_top_cf[:2]) > 100):
                 contact_flag = True
                 print("Part1 Contact")
+                print(part1_top_cf[:2])
                 break
         
         # Start to perform the task
-        task_module = importlib.import_module(f'tasks.{furniture_name}')
+        task_module = importlib.import_module(f'tasks.{task_config["task_name"]}')
         prepare = getattr(task_module, 'prepare')
         perform = getattr(task_module, 'perform')
         if not contact_flag:
+        # if True:
             all_finished = True
             target_ee_states = None
             target_ee_states, result = prepare(env, target_ee_states)
@@ -230,6 +236,7 @@ def collect_data(furniture_name, part1_name, part2_name):
             break
 
 def collect_other():
+    task_config = all_task_config["drawer_top"]
     env = gym.make(
         "dual-franka-hand-v0",
         furniture='drawer',
@@ -238,18 +245,33 @@ def collect_other():
         resize_img=False,
         set_friction=False,
         assembled=True,
+        task_config=task_config
     )
     env.reset()
     env.refresh()
-    for i in range(10):
+    for i in range(1):
         wait(env)
+
+    part1_name = task_config["part_names"][0]
+    rb_states = env.rb_states
+    part_idxs = env.part_idxs
+    part1_pose = C.to_homogeneous(
+            rb_states[part_idxs[part1_name]][0][:3],
+            C.quat2mat(rb_states[part_idxs[part1_name]][0][3:7]),
+    )
+    part1_angles = rot_mat_to_angles_tensor(part1_pose[:3,:3], "cuda")
+    print(part1_angles/np.pi)
 
 if __name__ == "__main__":
     # lamp|square_table|desk|drawer|cabinet|round_table|stool|chair|one_leg
-    # furniture_name = "desk"
-    # furniture_name = "lamp"
-    # furniture_name = "square_table"
-    # collect_data(furniture_name, task_config[furniture_name]["part_names"][0], task_config[furniture_name]["part_names"][1])
-    collect_other()
+    # task_name = "desk"
+    # task_name = "lamp"
+    # task_name = "square_table"
+    # task_name = "drawer_bottom"
+    task_name = "cabinet_door_left"
+    task_config = all_task_config[task_name]
+    
+    collect_data(task_config)
+    # collect_other()
     
 

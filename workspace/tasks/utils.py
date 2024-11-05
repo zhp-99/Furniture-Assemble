@@ -33,7 +33,7 @@ def rot_mat_to_angles(R):
     """
     sy = np.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
 
-    singular = sy < 1e-6
+    singular = sy < 1e-4
 
     if not singular:
         x = np.arctan2(R[2, 1], R[2, 2])
@@ -56,7 +56,7 @@ def rot_mat_to_angles_tensor(R, device):
     """
     sy = torch.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
 
-    singular = sy < 1e-6
+    singular = sy < 1e-4
 
     if not singular:
         x = torch.atan2(R[2, 1], R[2, 2])
@@ -118,7 +118,7 @@ def wait(env):
         env.step(action)
 
 # Control Operations
-def get_action(env, start_pos, start_quat, target_pos, target_quat, gripper):
+def get_action(env, start_pos, start_quat, target_pos, target_quat, gripper, slow=False):
     delta_pos = target_pos - start_pos
 
     # Scale translational action.
@@ -133,6 +133,8 @@ def get_action(env, start_pos, start_quat, target_pos, target_quat, gripper):
     max_delta_pos = 0.11 + 0.01 * torch.rand(3, device=env.device)
     max_delta_pos[2] -= 0.04
     delta_pos = torch.clamp(delta_pos, min=-max_delta_pos, max=max_delta_pos)
+    if slow:
+        delta_pos = delta_pos / 2
 
     delta_quat = C.quat_mul(C.quat_conjugate(start_quat), target_quat)
 
@@ -140,16 +142,18 @@ def get_action(env, start_pos, start_quat, target_pos, target_quat, gripper):
     action = torch.concat([delta_pos, delta_quat, gripper]).unsqueeze(0)
     return action
 
-def reach_target(env, target_ee_states, thresholds, is_gripper, gripper_sepnd_time=10, pose_spend_time=30):
+def reach_target(env, target_ee_states, thresholds, is_gripper, gripper_spend_time=10, pose_spend_time=30, slow=False):
     target_pos_1, target_quat_1, gripper_1 = target_ee_states[0]
     # target_pos_2, target_quat_2, gripper_2 = target_ee_states[1]
     pos_err_1, ori_err_1 = thresholds[0]
     pos_err_2, ori_err_2 = thresholds[1]   
+
     spend_time = 0
+
     while True:
         ee_pos_1, ee_quat_1 = env.get_ee_pose_world()
         ee_pos_1, ee_quat_1 = ee_pos_1.squeeze(), ee_quat_1.squeeze()
-        action_1 = get_action(env, ee_pos_1, ee_quat_1, target_pos_1, target_quat_1, gripper_1)
+        action_1 = get_action(env, ee_pos_1, ee_quat_1, target_pos_1, target_quat_1, gripper_1, slow=slow)
         action = action_1
 
         ee_pose_1 = C.to_homogeneous(ee_pos_1, C.quat2mat(ee_quat_1))
@@ -159,16 +163,17 @@ def reach_target(env, target_ee_states, thresholds, is_gripper, gripper_sepnd_ti
         half_width = 0
 
         if is_gripper:
-            if gripper_less(gripper_width, 2 * half_width + 0.001) or spend_time > gripper_sepnd_time:
+            if gripper_less(gripper_width, 2 * half_width + 0.001) or spend_time > gripper_spend_time:
                 return True
         else:
             if satisfy(ee_pose_1, target_pose_1, pos_err_1, ori_err_1): # and satisfy(ee_pose_2, target_pose_2, pos_err_2, ori_err_2, spend_time=spend_time):
                 return True
             if spend_time > pose_spend_time:
                 return False
-            
+
         env.step(action)
         spend_time += 1
+    
 
 # Point Cloud Operations
 def depth_image_to_point_cloud_GPU(depth_image, camera_view_matrix, camera_proj_matrix, width:float, height:float, depth_bar:float=None, device:torch.device='cuda:0'):

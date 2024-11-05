@@ -3,11 +3,13 @@ import numpy as np
 import furniture_bench.controllers.control_utils as C
 
 from tasks.utils import *
-from tasks.task_config import task_config
+from tasks.task_config import all_task_config
 
-furniture_name = "square_table"
-part1_name = task_config[furniture_name]["part_names"][0]
-part2_name = task_config[furniture_name]["part_names"][1]
+task_name = "square_table"
+task_config = all_task_config[task_name]
+furniture_name = task_config["furniture_name"]
+part1_name = task_config["part_names"][0]
+part2_name = task_config["part_names"][1]
 
 # Path Planning
 def pre_grasp(env, start_ee_states, env_states):
@@ -75,7 +77,7 @@ def pre_grasp_xy(env, start_ee_states, env_states):
     gripper_action = -1
     gripper = torch.tensor([gripper_action], device=env.device)
     target_ee_states = [(target_pos_1, target_quat_1, gripper)]#, (start_pos_2, start_quat_2, gripper_2)]
-    thresholds = [(None,None),(None,None)]
+    thresholds = [(None,None), (None,None)]
     return target_ee_states, thresholds, False
 
 
