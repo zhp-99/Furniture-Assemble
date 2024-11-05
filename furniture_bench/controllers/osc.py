@@ -78,6 +78,7 @@ def osc_factory(real_robot=True, *args, **kwargs):
             self.total_steps = math.floor(
                 ramp_ratio * float(controller_freq) / float(policy_freq)
             )  # Total num steps per interpolator action
+            print(f"Total steps: {self.total_steps}")
             # Save previous goal
             self.goal_pos = ee_pos_current.clone()
             self.prev_goal_pos = ee_pos_current.clone()

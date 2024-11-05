@@ -464,7 +464,7 @@ config: Dict[str, Any] = {
                 "name": "desk_top",
                 "asset_file": "furniture/urdf/desk/desk_top.urdf",
                 "ids": [109, 110, 111, 112],
-                "reset_pos": [[0, 0.24, -0.01592]] * 2 + [[0.07, 0.275, -0.01592]] * 3,
+                "reset_pos": [[0.04, 0.20, -0.01592]] * 2 + [[0.07, 0.275, -0.01592]] * 3,
                 "reset_ori": [rot_mat(np.array([-np.pi / 2, 0, 0]), hom=True)] * 5,
                 "part_moved_skill_idx": 2,
                 "high_rand_reset_pos": [
@@ -906,9 +906,9 @@ config: Dict[str, Any] = {
                 "name": "drawer_box",
                 "asset_file": "furniture/urdf/drawer/drawer_box.urdf",
                 "ids": [48, 49, 50, 52],  # Note that 51 is missing.
-                "reset_pos": [[0.08, 0.13, -0.04125]] * 2
+                "reset_pos": [[0.05, 0.18, -0.07]] * 2
                 + [[0.11, 0.30, -0.04125]] * 3,
-                "reset_ori": [rot_mat(np.array([np.pi / 2, 0, np.pi]), hom=True)] * 2
+                "reset_ori": [rot_mat(np.array([np.pi/2, 0, np.pi/2]), hom=True)] * 2
                 + [rot_mat(np.array([np.pi / 2, 0, -np.pi / 2]), hom=True)] * 3,
                 "part_moved_skill_idx": 2,
                 "high_rand_reset_pos": [
@@ -956,7 +956,8 @@ config: Dict[str, Any] = {
                 "reset_pos": [[-0.11, 0.12, -0.0255]] * 5,
                 "reset_ori": [rot_mat(np.array([np.pi / 2, 0, 0]), hom=True)] * 5,
                 # "default_assembled_pose": get_mat([0, -0.0345, 0.008], [0, 0, 0]),
-                "default_assembled_pose": get_mat([0, -0.0300, 0.008], [0, 0, 0]),
+                # "default_assembled_pose": get_mat([-0.00097432, -0.03434966,  0.0284283], [0, 0, 0]),
+                "default_assembled_pose": get_mat([-0.00026228, -0.03447104, 0.06 ], [0, 0, 0]),
                 "high_rand_reset_pos": [
                     [np.array([-0.1, 0.293, -0.029])],
                     [np.array([0.069, 0.137, -0.027])],
@@ -1002,8 +1003,8 @@ config: Dict[str, Any] = {
                 "reset_pos": [[-0.11, 0.25, -0.0255]] * 4 + [[0.055, 0.30, -0.03075]],
                 "reset_ori": [rot_mat(np.array([np.pi / 2, 0, 0]), hom=True)] * 4
                 + [rot_mat([np.pi / 2, 0, -np.pi / 2], hom=True)],
-                # "default_assembled_pose": get_mat([0, 0.0105, 0.008], [0, 0, 0]),
-                "default_assembled_pose": get_mat([0, 0.0095, 0.008], [0, 0, 0]),
+                # "default_assembled_pose": get_mat([0, 0.0105, 0.015], [0, 0, 0]),
+                "default_assembled_pose": get_mat([-0.00169739, 0.01106862, 0.058], [0, 0, 0]),
                 "high_rand_reset_pos": [
                     [np.array([0.086, 0.173, -0.029])],
                     [np.array([0.034, 0.261, -0.027])],
@@ -1800,7 +1801,7 @@ config: Dict[str, Any] = {
                 "asset_file": "furniture/urdf/cabinet/cabinet_body.urdf",
                 "ids": [134, 135, 136, 137, 138],
                 # 'reset_pos': [[0.16, 0.13, -0.02875]],[[-0.04, 0.09, -0.01125]]
-                "reset_pos": [[0, 0.24, -0.02875]] * 2 + [[0.10, 0.28, -0.02875]] * 3,
+                "reset_pos": [[0, 0.24, -0.05]] * 2 + [[0.10, 0.28, -0.02875]] * 3,
                 "reset_ori": [rot_mat(np.array([0, -np.pi / 2, 0]), hom=True)] * 5,
                 "part_moved_skill_idx": 2,
                 "high_rand_reset_pos": [
@@ -1884,7 +1885,7 @@ config: Dict[str, Any] = {
                         )
                     ],
                 ],
-                "default_assembled_pose": get_mat([-0.02275, -0.0375, 0.025], [0, np.pi / 2, 0])
+                "default_assembled_pose": get_mat([-0.02622694, -0.1,  0.02649407], [0, np.pi / 2, 0])
             },
             "cabinet_door_right": {
                 "name": "cabinet_door_right",

@@ -40,8 +40,8 @@ from furniture_bench.envs.observation import (
 )
 from furniture_bench.robot.robot_state import ROBOT_STATE_DIMS
 from furniture_bench.furniture.parts.part import Part
-from workspace.tasks.task_config import task_config
-
+from typing import Any, Dict
+from workspace.tasks.utils import rot_mat_tensor, rot_mat_to_angles
 
 ASSET_ROOT = str(Path(__file__).parent.parent.absolute() / "assets")
 
@@ -90,6 +90,7 @@ class FurnitureSimEnv(gym.Env):
         act_rot_repr: str = "quat",
         assembled: bool = False,
         set_friction: bool = True,
+        task_config: Dict[str, Any] = None,
         **kwargs,
     ):
         """
@@ -117,8 +118,8 @@ class FurnitureSimEnv(gym.Env):
         super(FurnitureSimEnv, self).__init__()
         # zhp: init for env
         self.task_config = task_config
-        self.part1_name = self.task_config[furniture]["part_names"][0]
-        self.part2_name = self.task_config[furniture]["part_names"][1]
+        self.part1_name = self.task_config["part_names"][0]
+        self.part2_name = self.task_config["part_names"][1]
         # self.part2_name = None
         self.assembled = assembled
         self.set_friction = set_friction
@@ -261,11 +262,12 @@ class FurnitureSimEnv(gym.Env):
         # Create assets.
         self.part_assets = {}
         for part in self.furniture.parts:
-            if part.name not in self.task_config[self.furniture_name]["part_names"]:
+            if part.name not in self.task_config["part_names"]:
                     continue
             asset_option = sim_config["asset"][part.name]
             # zhp: for debug
-            # asset_option.fix_base_link = True
+            # if part.name == self.part1_name:
+            #     asset_option.fix_base_link = True
             self.part_assets[part.name] = self.isaac_gym.load_asset(
                 self.sim, ASSET_ROOT, part.asset_file, asset_option
             )
@@ -479,7 +481,7 @@ class FurnitureSimEnv(gym.Env):
             # Add furniture parts.
             poses = []
             for part in self.furniture.parts:
-                if part.name not in self.task_config[self.furniture_name]["part_names"]:
+                if part.name not in self.task_config["part_names"]:
                     continue
                 # print("part name: ", part.name)
                 # zhp: need?
@@ -492,7 +494,6 @@ class FurnitureSimEnv(gym.Env):
                     
                 # else:
                 pos, ori = self._get_reset_pose(part)
-                    # square_table_leg4
 
                 # print("pos: ", pos)
                 # print("ori: ", ori)
@@ -524,11 +525,11 @@ class FurnitureSimEnv(gym.Env):
                     env, part_handle
                 )
                 # part_props[0].friction = sim_config["parts"]["friction"]
-                if self.set_friction:
+                if self.set_friction and "part_frictions" in self.task_config.keys():
                     if part.name == self.part1_name:
-                        part_props[0].friction = self.task_config[self.furniture_name]["part_frictions"][0]
+                        part_props[0].friction = self.task_config["part_frictions"][0]
                     elif part.name == self.part2_name:
-                        part_props[0].friction = self.task_config[self.furniture_name]["part_frictions"][1]
+                        part_props[0].friction = self.task_config["part_frictions"][1]
                     else:
                         raise ValueError(f"Unknown part name: {part.name}")
                 
@@ -536,14 +537,14 @@ class FurnitureSimEnv(gym.Env):
                         env, part_handle, part_props
                 )
 
-                if "part_mass" in self.task_config[self.furniture_name]:
+                if "part_mass" in self.task_config.keys():
                     part_body_props = self.isaac_gym.get_actor_rigid_body_properties(
                         env, part_handle
                     )
                     if part.name == self.part1_name:
-                        part_body_props[0].mass = self.task_config[self.furniture_name]["part_mass"][0]
+                        part_body_props[0].mass = self.task_config["part_mass"][0]
                     elif part.name == self.part2_name:
-                        part_body_props[0].mass = self.task_config[self.furniture_name]["part_mass"][1]
+                        part_body_props[0].mass = self.task_config["part_mass"][1]
                     else:
                         raise ValueError(f"Unknown part name: {part.name}")
                     self.isaac_gym.set_actor_rigid_body_properties(
@@ -568,7 +569,7 @@ class FurnitureSimEnv(gym.Env):
 
             self.parts_handles = {}
             for part in self.furniture.parts:
-                if part.name not in self.task_config[self.furniture_name]["part_names"]:
+                if part.name not in self.task_config["part_names"]:
                     continue
                 self.parts_handles[part.name] = self.isaac_gym.find_actor_index(
                     env, part.name, gymapi.DOMAIN_ENV
@@ -584,7 +585,7 @@ class FurnitureSimEnv(gym.Env):
             # self.franka_actor_idx_all_2.append(self.isaac_gym.find_actor_index(self.envs[env_idx], 'franka_2', gymapi.DOMAIN_SIM))
             self.part_actor_idx_by_env[env_idx] = []
             for part in self.furnitures[env_idx].parts:
-                if part.name not in self.task_config[self.furniture_name]["part_names"]:
+                if part.name not in self.task_config["part_names"]:
                     continue
                 part_actor_idx = self.isaac_gym.find_actor_index(self.envs[env_idx], part.name, gymapi.DOMAIN_SIM)
                 self.part_actor_idx_all.append(part_actor_idx)
@@ -642,9 +643,23 @@ class FurnitureSimEnv(gym.Env):
         else:
             if part.name == self.part1_name:
                 pos = config["furniture"][self.furniture_name][self.part1_name]["reset_pos"][0]
-                ori = config["furniture"][self.furniture_name][self.part1_name]["reset_ori"][0]
+                ori = config["furniture"][self.furniture_name][self.part1_name]["reset_ori"][0] 
+                if "randomness" in self.task_config.keys():
+                    pos_randomness = self.task_config["randomness"]["pos"]
+                    ori_randomness = self.task_config["randomness"]["ori"]
+                
+                    rand_pos = [pos[i] + float(np.random.uniform(low, high)) for i, (low, high) in enumerate(pos_randomness)]
+                    ori_angles = rot_mat_to_angles(ori)
+                    rand_ori_angles = [ori_angles[i] + float(np.random.uniform(low, high)) for i, (low, high) in enumerate(ori_randomness)]
+                    rand_ori = rot_mat(rand_ori_angles, hom=True)
+
+                    pos = rand_pos
+                    ori = rand_ori
+
                 self.part1_pos = pos
                 self.part1_ori = ori
+
+
             elif part.name == self.part2_name:
                 if self.assembled:
                     default_assembled_pose = config["furniture"][self.furniture_name][self.part2_name]["default_assembled_pose"]
@@ -652,9 +667,10 @@ class FurnitureSimEnv(gym.Env):
                     scaled_default_assembled_pose[:3, 3] *= self.furniture_scale_factor
                 else:
                     scaled_default_assembled_pose = np.load(
-                        self.task_config[self.furniture_name]["disassembled_pose_path"],
+                        self.task_config["disassembled_pose_path"],
                         allow_pickle=True,
                     )
+                # scaled_default_assembled_pose[3, 3] += 0.01
                 table_pose = get_mat(self.part1_pos, self.part1_ori)
                 leg_pose = (
                     table_pose
@@ -1011,7 +1027,6 @@ class FurnitureSimEnv(gym.Env):
                 if (
                     torch.sign(grasp_1) != torch.sign(self.last_grasp_1[env_idx])
                     and torch.abs(grasp_1) > self.grasp_margin
-                    
                 ):
                     grip_sep_1 = self.max_gripper_width if grasp_1 < 0 else 0.0
                     self.last_grasp_1[env_idx] = grasp_1
@@ -1054,9 +1069,10 @@ class FurnitureSimEnv(gym.Env):
                 state_dict_1["jacobian"] = self.jacobian_eef_1[
                     env_idx
                 ].t()  # OSC expect column major
-                torque_action[env_idx, :7] = self.osc_ctrls_1[env_idx](state_dict_1)[
+                torques = self.osc_ctrls_1[env_idx](state_dict_1)[
                     "joint_torques"
                 ]
+                torque_action[env_idx, :7] = torques
 
                 # zhp: changed
                 # state_dict_2["ee_pose"] = C.pose2mat(
@@ -1583,7 +1599,7 @@ class FurnitureSimEnv(gym.Env):
             parts_poses (np.ndarray): The poses of the parts. If None, the parts will be reset to the initial pose.
         """
         for part_idx, part in enumerate(self.furnitures[env_idx].parts):
-            if part.name not in self.task_config[self.furniture_name]:
+            if part.name not in self.task_config["part_names"]:
                     continue
             # Use the given pose.
             if parts_poses is not None:
